@@ -24,7 +24,7 @@ I enjoy the full stack of ML work:
 
 ## Current identity
 
-Graduate Student at USC, working toward roles in AI/ML engineering and applied research.
+Graduate Student at USC, majoring in Applied Data Science, working toward roles in AI/ML engineering and applied research.
 
 ## Related notes
 
