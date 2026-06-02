@@ -4,6 +4,9 @@ tags:
   - projects
   - computer-vision
   - medical-ai
+  - deep-learning
+  - cnn
+  - healthcare-ai
 ---
 
 - Tagline: Automated eye disease diagnosis

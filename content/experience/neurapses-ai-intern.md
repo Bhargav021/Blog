@@ -4,6 +4,8 @@ tags:
   - experience
   - rag
   - nlp
+  - data-engineering
+  - semantic-search
 ---
 
 - Company: Neurapses Technologies

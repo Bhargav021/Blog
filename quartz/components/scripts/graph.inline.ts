@@ -9,6 +9,8 @@ import {
   forceLink,
   forceCollide,
   forceRadial,
+  forceX,
+  forceY,
   zoomIdentity,
   select,
   drag,
@@ -36,11 +38,15 @@ type NodeData = {
 type SimpleLinkData = {
   source: SimpleSlug
   target: SimpleSlug
+  kind: "page" | "tag"
+  weight: number
 }
 
 type LinkData = {
   source: NodeData
   target: NodeData
+  kind: "page" | "tag"
+  weight: number
 } & SimulationLinkDatum<NodeData>
 
 type LinkRenderData = GraphicsInfo & {
@@ -85,6 +91,7 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     opacityScale,
     removeTags,
     showTags,
+    groupByTags,
     focusOnHover,
     enableRadial,
   } = JSON.parse(graph.dataset["cfg"]!) as D3Config
@@ -105,11 +112,11 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
 
     for (const dest of outgoing) {
       if (validLinks.has(dest)) {
-        links.push({ source: source, target: dest })
+        links.push({ source: source, target: dest, kind: "page", weight: 1 })
       }
     }
 
-    if (showTags) {
+    if (showTags && groupByTags) {
       const localTags = details.tags
         .filter((tag) => !removeTags.includes(tag))
         .map((tag) => simplifySlug(("tags/" + tag) as FullSlug))
@@ -117,7 +124,7 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       tags.push(...localTags.filter((tag) => !tags.includes(tag)))
 
       for (const tag of localTags) {
-        links.push({ source: source, target: tag })
+        links.push({ source: source, target: tag, kind: "tag", weight: 0.45 })
       }
     }
   }
@@ -140,7 +147,7 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     }
   } else {
     validLinks.forEach((id) => neighbourhood.add(id))
-    if (showTags) tags.forEach((tag) => neighbourhood.add(tag))
+    if (showTags && groupByTags) tags.forEach((tag) => neighbourhood.add(tag))
   }
 
   const nodes = [...neighbourhood].map((url) => {
@@ -158,8 +165,29 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       .map((l) => ({
         source: nodes.find((n) => n.id === l.source)!,
         target: nodes.find((n) => n.id === l.target)!,
+        kind: l.kind,
+        weight: l.weight,
       })),
   }
+
+  const domainPalette = [
+    "#89b4fa",
+    "#cba6f7",
+    "#a6e3a1",
+    "#fab387",
+    "#94e2d5",
+    "#f9e2af",
+    "#f2cdcd",
+  ]
+
+  const primaryTag = (node: NodeData) => {
+    if (node.id.startsWith("tags/")) return node.id.replace("tags/", "")
+    const cleaned = node.tags.filter((tag) => !removeTags.includes(tag))
+    return cleaned[0] ?? "misc"
+  }
+
+  const domainTags = [...new Set(graphData.nodes.map((n) => primaryTag(n)))].sort()
+  const domainTagToIndex = new Map(domainTags.map((tag, idx) => [tag, idx]))
 
   const width = graph.offsetWidth
   const height = Math.max(graph.offsetHeight, 250)
@@ -168,11 +196,35 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   const simulation: Simulation<NodeData, LinkData> = forceSimulation<NodeData>(graphData.nodes)
     .force("charge", forceManyBody().strength(-100 * repelForce))
     .force("center", forceCenter().strength(centerForce))
-    .force("link", forceLink(graphData.links).distance(linkDistance))
+    .force(
+      "link",
+      forceLink(graphData.links)
+        .distance((link) => (link.kind === "tag" ? linkDistance * 1.55 : linkDistance))
+        .strength((link) => (link.kind === "tag" ? 0.12 : 0.45)),
+    )
     .force("collide", forceCollide<NodeData>((n) => nodeRadius(n)).iterations(3))
 
   const radius = (Math.min(width, height) / 2) * 0.8
   if (enableRadial) simulation.force("radial", forceRadial(radius).strength(0.2))
+  if (groupByTags && domainTags.length > 1) {
+    simulation
+      .force(
+        "tagX",
+        forceX<NodeData>((node) => {
+          const idx = domainTagToIndex.get(primaryTag(node)) ?? 0
+          const theta = (Math.PI * 2 * idx) / Math.max(domainTags.length, 1)
+          return Math.cos(theta) * radius * 0.65
+        }).strength(0.22),
+      )
+      .force(
+        "tagY",
+        forceY<NodeData>((node) => {
+          const idx = domainTagToIndex.get(primaryTag(node)) ?? 0
+          const theta = (Math.PI * 2 * idx) / Math.max(domainTags.length, 1)
+          return Math.sin(theta) * radius * 0.65
+        }).strength(0.22),
+      )
+  }
 
   // precompute style prop strings as pixi doesn't support css variables
   const cssVars = [
@@ -198,6 +250,9 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     const isCurrent = d.id === slug
     if (isCurrent) {
       return computedStyleMap["--secondary"]
+    } else if (groupByTags) {
+      const idx = domainTagToIndex.get(primaryTag(d)) ?? 0
+      return domainPalette[idx % domainPalette.length]
     } else if (visited.has(d.id) || d.id.startsWith("tags/")) {
       return computedStyleMap["--tertiary"]
     } else {
@@ -209,13 +264,38 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
     const numLinks = graphData.links.filter(
       (l) => l.source.id === d.id || l.target.id === d.id,
     ).length
-    return 2 + Math.sqrt(numLinks)
+    return 2 + Math.sqrt(numLinks) * 0.85
   }
 
   let hoveredNodeId: string | null = null
   let hoveredNeighbours: Set<string> = new Set()
   const linkRenderData: LinkRenderData[] = []
   const nodeRenderData: NodeRenderData[] = []
+  const graphOuter = graph.closest(".graph-outer") as HTMLElement | null
+  let tooltipEl = graphOuter?.querySelector(".graph-tooltip") as HTMLElement | null
+  if (!tooltipEl && graphOuter) {
+    tooltipEl = document.createElement("div")
+    tooltipEl.className = "graph-tooltip"
+    graphOuter.appendChild(tooltipEl)
+  }
+
+  function showTooltip(node: NodeData, px: number, py: number) {
+    if (!tooltipEl || !graphOuter) return
+    const tags = node.tags.length ? node.tags.map((tag) => `#${tag}`).join(" ") : "No tags"
+    tooltipEl.innerHTML = `
+      <div class="graph-tooltip-title">${node.text}</div>
+      <div class="graph-tooltip-tags">${tags}</div>
+    `
+    const bounds = graphOuter.getBoundingClientRect()
+    tooltipEl.style.left = `${Math.max(6, Math.min(px - bounds.left, bounds.width - 220))}px`
+    tooltipEl.style.top = `${Math.max(14, Math.min(py - bounds.top, bounds.height - 40))}px`
+    tooltipEl.classList.add("visible")
+  }
+
+  function hideTooltip() {
+    tooltipEl?.classList.remove("visible")
+  }
+
   function updateHoverInfo(newHoveredId: string | null) {
     hoveredNodeId = newHoveredId
 
@@ -260,9 +340,17 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       // with full alpha and the rest with default alpha
       if (hoveredNodeId) {
         alpha = l.active ? 1 : 0.2
+      } else if (l.simulationData.kind === "tag") {
+        alpha = 0.45
+      } else {
+        alpha = 0.72
       }
 
-      l.color = l.active ? computedStyleMap["--gray"] : computedStyleMap["--lightgray"]
+      l.color = l.active
+        ? computedStyleMap["--gray"]
+        : l.simulationData.kind === "tag"
+          ? computedStyleMap["--tertiary"]
+          : computedStyleMap["--lightgray"]
       tweenGroup.add(new Tweened<LinkRenderData>(l).to({ alpha }, 200))
     }
 
@@ -378,7 +466,7 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       interactive: false,
       eventMode: "none",
       text: n.text,
-      alpha: 0,
+      alpha: 0.55,
       anchor: { x: 0.5, y: 1.2 },
       style: {
         fontSize: fontSize * 15,
@@ -399,9 +487,10 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       cursor: "pointer",
     })
       .circle(0, 0, nodeRadius(n))
-      .fill({ color: isTagNode ? computedStyleMap["--light"] : color(n) })
+      .fill({ color: color(n) })
       .on("pointerover", (e) => {
         updateHoverInfo(e.target.label)
+        showTooltip(n, e.global.x, e.global.y)
         oldLabelOpacity = label.alpha
         if (!dragging) {
           renderPixiFromD3()
@@ -410,13 +499,14 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       .on("pointerleave", () => {
         updateHoverInfo(null)
         label.alpha = oldLabelOpacity
+        hideTooltip()
         if (!dragging) {
           renderPixiFromD3()
         }
       })
 
     if (isTagNode) {
-      gfx.stroke({ width: 2, color: computedStyleMap["--tertiary"] })
+      gfx.stroke({ width: 1.6, color: computedStyleMap["--light"] })
     }
 
     nodesContainer.addChild(gfx)
@@ -511,7 +601,7 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
 
           // zoom adjusts opacity of labels too
           const scale = transform.k * opacityScale
-          let scaleOpacity = Math.max((scale - 1) / 3.75, 0)
+          let scaleOpacity = Math.max((scale - 0.6) / 3.35, 0.18)
           const activeNodes = nodeRenderData.filter((n) => n.active).flatMap((n) => n.label)
 
           for (const label of labelsContainer.children) {
@@ -541,7 +631,11 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
       l.gfx.moveTo(linkData.source.x! + width / 2, linkData.source.y! + height / 2)
       l.gfx
         .lineTo(linkData.target.x! + width / 2, linkData.target.y! + height / 2)
-        .stroke({ alpha: l.alpha, width: 1, color: l.color })
+        .stroke({
+          alpha: l.alpha,
+          width: linkData.kind === "tag" ? 0.9 : 1.35,
+          color: l.color,
+        })
     }
 
     tweens.forEach((t) => t.update(time))
@@ -552,12 +646,38 @@ async function renderGraph(graph: HTMLElement, fullSlug: FullSlug) {
   requestAnimationFrame(animate)
   return () => {
     stopAnimation = true
+    hideTooltip()
     app.destroy()
   }
 }
 
 let localGraphCleanups: (() => void)[] = []
 let globalGraphCleanups: (() => void)[] = []
+const graphGroupingStorageKey = "graph-group-by-tags"
+
+function setGroupByTagsOnGraph(container: Element, enabled: boolean) {
+  if (!(container instanceof HTMLElement)) return
+  const currentCfg = JSON.parse(container.dataset.cfg ?? "{}") as Partial<D3Config>
+  currentCfg.groupByTags = enabled
+  currentCfg.showTags = enabled
+  container.dataset.cfg = JSON.stringify(currentCfg)
+}
+
+function readGroupingPreference() {
+  return localStorage.getItem(graphGroupingStorageKey) === "1"
+}
+
+function persistGroupingPreference(enabled: boolean) {
+  localStorage.setItem(graphGroupingStorageKey, enabled ? "1" : "0")
+}
+
+function syncGroupingButtons(enabled: boolean) {
+  const toggleButtons = [...document.getElementsByClassName("group-by-tags-toggle")] as HTMLElement[]
+  for (const button of toggleButtons) {
+    button.setAttribute("aria-pressed", enabled ? "true" : "false")
+    button.textContent = enabled ? "Grouped by tags" : "Group by tags"
+  }
+}
 
 function cleanupLocalGraphs() {
   for (const cleanup of localGraphCleanups) {
@@ -576,9 +696,22 @@ function cleanupGlobalGraphs() {
 document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
   const slug = e.detail.url
   addToVisited(simplifySlug(slug))
+  let groupByTags = readGroupingPreference()
+
+  function applyGroupingToAllGraphs() {
+    const graphContainers = [
+      ...document.getElementsByClassName("graph-container"),
+      ...document.getElementsByClassName("global-graph-container"),
+    ]
+    for (const container of graphContainers) {
+      setGroupByTagsOnGraph(container, groupByTags)
+    }
+    syncGroupingButtons(groupByTags)
+  }
 
   async function renderLocalGraph() {
     cleanupLocalGraphs()
+    applyGroupingToAllGraphs()
     const localGraphContainers = document.getElementsByClassName("graph-container")
     for (const container of localGraphContainers) {
       localGraphCleanups.push(await renderGraph(container as HTMLElement, slug))
@@ -608,6 +741,7 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
       const graphContainer = container.querySelector(".global-graph-container") as HTMLElement
       registerEscapeHandler(container, hideGlobalGraph)
       if (graphContainer) {
+        setGroupByTagsOnGraph(graphContainer, groupByTags)
         globalGraphCleanups.push(await renderGraph(graphContainer, slug))
       }
     }
@@ -639,6 +773,27 @@ document.addEventListener("nav", async (e: CustomEventMap["nav"]) => {
     icon.addEventListener("click", renderGlobalGraph)
     window.addCleanup(() => icon.removeEventListener("click", renderGlobalGraph))
   })
+
+  const groupingButtons = [...document.getElementsByClassName("group-by-tags-toggle")] as HTMLElement[]
+  const groupToggleHandler = async () => {
+    groupByTags = !groupByTags
+    persistGroupingPreference(groupByTags)
+    applyGroupingToAllGraphs()
+    await renderLocalGraph()
+
+    const anyGlobalGraphOpen = containers.some((container) => container.classList.contains("active"))
+    if (anyGlobalGraphOpen) {
+      cleanupGlobalGraphs()
+      await renderGlobalGraph()
+    }
+  }
+
+  for (const button of groupingButtons) {
+    button.addEventListener("click", groupToggleHandler)
+    window.addCleanup(() => button.removeEventListener("click", groupToggleHandler))
+  }
+
+  applyGroupingToAllGraphs()
 
   document.addEventListener("keydown", shortcutHandler)
   window.addCleanup(() => {

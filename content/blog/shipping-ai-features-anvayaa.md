@@ -4,6 +4,9 @@ tags:
   - blog
   - draft
   - product
+  - mlops
+  - ci-cd
+  - product-engineering
 status: draft
 ---
 

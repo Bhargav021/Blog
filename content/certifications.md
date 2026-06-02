@@ -2,6 +2,9 @@
 title: Certifications
 tags:
   - certifications
+  - credentials
+  - deep-learning
+  - cloud-ai
 ---
 
 ## NPTEL NOC: Deep Learning - IIT Ropar

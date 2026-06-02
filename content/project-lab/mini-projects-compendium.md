@@ -2,6 +2,9 @@
 title: Mini Projects Compendium
 tags:
   - mini-projects
+  - experiments
+  - data-visualization
+  - full-stack-ai
 ---
 
 ## Supply Chain Flow Visualization Dashboard

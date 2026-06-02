@@ -2,6 +2,8 @@
 title: Contact
 tags:
   - contact
+  - networking
+  - professional-profile
 ---
 
 - Location: Los Angeles, California

@@ -4,6 +4,9 @@ tags:
   - projects
   - robotics
   - diffusion
+  - vision-language-action
+  - diffusion-models
+  - multimodal
 ---
 
 - Tagline: Training diffusion models for dual-arm manipulation

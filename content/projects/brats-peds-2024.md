@@ -4,6 +4,9 @@ tags:
   - projects
   - medical-ai
   - segmentation
+  - medical-imaging
+  - 3d-segmentation
+  - pytorch
 ---
 
 - Tagline: Deep learning for clinical MRI analysis

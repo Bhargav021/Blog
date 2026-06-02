@@ -2,6 +2,9 @@
 title: Education
 tags:
   - education
+  - academics
+  - data-science
+  - coursework
 ---
 
 ## M.S. Applied Data Science

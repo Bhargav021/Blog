@@ -2,6 +2,8 @@
 title: Featured Projects
 tags:
   - projects
+  - featured
+  - ai-portfolio
 ---
 
 ## Portfolio projects

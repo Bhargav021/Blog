@@ -6,9 +6,12 @@ aliases:
 tags:
   - portfolio
   - machine-learning
+  - ai-systems
+  - applied-data-science
+  - ml-engineering
 ---
 
-![Sunrise banner](./assets/profile-pic.jpg)
+<img src="./assets/profile-pic.jpg" alt="Bhargav Limbasia profile photo" width="140" style="border-radius: 14px; border: 1px solid var(--lightgray);" />
 
 ## Welcome
 

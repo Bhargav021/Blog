@@ -3,6 +3,9 @@ title: About Me
 tags:
   - about
   - profile
+  - applied-ml
+  - research
+  - ml-engineering
 ---
 
 ## Who I am

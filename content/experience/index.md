@@ -2,6 +2,8 @@
 title: Experience
 tags:
   - experience
+  - career
+  - ai-engineering
 ---
 
 ## Timeline

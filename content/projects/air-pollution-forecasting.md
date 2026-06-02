@@ -4,6 +4,9 @@ tags:
   - projects
   - time-series
   - forecasting
+  - machine-learning
+  - environmental-ai
+  - lstm
 ---
 
 - Tagline: Time series forecasting for environmental health
