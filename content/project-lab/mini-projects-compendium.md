@@ -13,6 +13,7 @@ tags:
 - Tech: Vue 3, Deck.gl, Mapbox GL, D3.js, SBEB Algorithm, Web Workers, Bootstrap 5, Vite
 - Outcomes: 51K+ orders rendered with semantic zoom transitions and inventory views
 - Lessons: GPU rendering patterns, edge bundling, and semantic zoom storytelling
+- Live Demo: [website](https://dsci-554.github.io/project-team11/)
 - GitHub: [LogisticsDataSemantic-Zoom](https://github.com/Bhargav021/LogisticsDataSemantic-Zoom)
 
 ## RecipeLLM
